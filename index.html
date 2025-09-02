@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>📊 Evaluación Integral</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f9f9f9; }
+    h2 { color: #333; }
+    table { border-collapse: collapse; width: 100%; margin-top: 15px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    th { background: #eee; }
+    input[type="number"] { width: 60px; }
+    .hidden { display: none; }
+    .btn { margin: 5px; padding: 8px 12px; border: none; background: #4285f4; color: #fff; cursor: pointer; border-radius: 4px; }
+    .btn:hover { background: #3367d6; }
+    .section { margin-top: 20px; padding: 15px; background: #fff; border: 1px solid #ddd; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h2>📘 Sistema de Evaluación Integral</h2>
+
+  <!-- LOGIN -->
+  <div id="loginSection" class="section">
+    <h3>🔑 Ingreso Administrador</h3>
+    <input type="password" id="adminPass" placeholder="Contraseña">
+    <button class="btn" onclick="login()">Ingresar</button>
+  </div>
+
+  <!-- ADMIN -->
+  <div id="adminSection" class="section hidden">
+    <h3>👨‍💼 Panel Administrador</h3>
+
+    <h4>Añadir estudiante manualmente</h4>
+    Código: <input type="text" id="codigo">
+    Nombre: <input type="text" id="nombre">
+    <button class="btn" onclick="addEstudiante()">Añadir</button>
+
+    <h4>Cargar estudiantes vía CSV</h4>
+    <input type="file" id="csvFile" accept=".csv" onchange="loadCSV(event)">
+
+    <h4>Importar / Exportar notas</h4>
+    <button class="btn" onclick="exportCSV()">⬇️ Descargar plantilla CSV</button>
+    <input type="file" id="uploadCSV" accept=".csv" onchange="importCSV(event)">
+  </div>
+
+  <!-- NOTAS -->
+  <div id="notasSection" class="section hidden">
+    <h3>📊 Registro de Notas</h3>
+    <table id="tablaNotas">
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Nombre</th>
+          <th>Ser (Subcriterios)</th>
+          <th>Promedio Ser</th>
+          <th>Saber (Subcriterios)</th>
+          <th>Promedio Saber</th>
+          <th>Hacer (Subcriterios)</th>
+          <th>Promedio Hacer</th>
+          <th>Decidir (Subcriterios)</th>
+          <th>Promedio Decidir</th>
+          <th>Autoevaluación</th>
+          <th>Extras</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script>
+    let estudiantes = [];
+    const password = "1234"; // 🔑 Contraseña del admin
+
+    function login() {
+      const input = document.getElementById("adminPass").value;
+      if (input === password) {
+        document.getElementById("loginSection").classList.add("hidden");
+        document.getElementById("adminSection").classList.remove("hidden");
+        document.getElementById("notasSection").classList.remove("hidden");
+      } else {
+        alert("❌ Contraseña incorrecta");
+      }
+    }
+
+    function addEstudiante() {
+      const codigo = document.getElementById("codigo").value.trim();
+      const nombre = document.getElementById("nombre").value.trim();
+      if (!codigo || !nombre) {
+        alert("Debe ingresar código y nombre");
+        return;
+      }
+      estudiantes.push({ codigo, nombre, notas: {} });
+      renderNotas();
+      document.getElementById("codigo").value = "";
+      document.getElementById("nombre").value = "";
+    }
+
+    function renderNotas() {
+      const tbody = document.querySelector("#tablaNotas tbody");
+      tbody.innerHTML = "";
+      estudiantes.forEach((est, index) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${est.codigo}</td>
+          <td>${est.nombre}</td>
+          <td>${crearInputs("ser", est, index, 2)}</td>
+          <td id="prom_ser_${index}"></td>
+          <td>${crearInputs("saber", est, index, 2)}</td>
+          <td id="prom_saber_${index}"></td>
+          <td>${crearInputs("hacer", est, index, 2)}</td>
+          <td id="prom_hacer_${index}"></td>
+          <td>${crearInputs("decidir", est, index, 2)}</td>
+          <td id="prom_decidir_${index}"></td>
+          <td><input type="number" min="0" max="25" value="${est.notas.auto||0}" onchange="updateNota(${index}, 'auto', this.value)"></td>
+          <td><input type="number" min="0" value="${est.notas.extras||0}" onchange="updateNota(${index}, 'extras', this.value)"></td>
+          <td id="total_${index}"></td>
+        `;
+        tbody.appendChild(row);
+        calcularTotal(index);
+      });
+    }
+
+    function crearInputs(dim, est, index, n) {
+      let html = "";
+      if (!est.notas[dim]) est.notas[dim] = Array(n).fill(0);
+      est.notas[dim].forEach((val, i) => {
+        html += `<input type="number" min="0" max="25" value="${val}" onchange="updateSub(${index}, '${dim}', ${i}, this.value)"> `;
+      });
+      return html;
+    }
+
+    function updateSub(index, dim, i, val) {
+      estudiantes[index].notas[dim][i] = Number(val);
+      calcularTotal(index);
+    }
+
+    function updateNota(index, tipo, val) {
+      estudiantes[index].notas[tipo] = Number(val);
+      calcularTotal(index);
+    }
+
+    function calcularTotal(index) {
+      const notas = estudiantes[index].notas;
+      const promedios = {};
+      ["ser","saber","hacer","decidir"].forEach(dim=>{
+        if (notas[dim]) {
+          const arr = notas[dim];
+          const prom = arr.reduce((a,b)=>a+b,0)/arr.length;
+          promedios[dim] = prom || 0;
+          document.getElementById(`prom_${dim}_${index}`).innerText = prom.toFixed(2);
+        }
+      });
+      const total = (promedios.ser||0)+(promedios.saber||0)+(promedios.hacer||0)+(promedios.decidir||0)+(notas.auto||0)+(notas.extras||0);
+      document.getElementById(`total_${index}`).innerText = total.toFixed(2);
+    }
+
+    function loadCSV(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        const rows = e.target.result.split("\n").map(r => r.split(","));
+        rows.forEach(row=>{
+          if(row.length>=2){
+            estudiantes.push({codigo: row[0].trim(), nombre: row[1].trim(), notas:{}});
+          }
+        });
+        renderNotas();
+      };
+      reader.readAsText(file);
+    }
+
+    function exportCSV() {
+      let csv = "Codigo,Nombre,Ser_1,Ser_2,Saber_1,Saber_2,Hacer_1,Hacer_2,Decidir_1,Decidir_2,Autoevaluacion,Extras\n";
+      estudiantes.forEach(est => {
+        csv += `${est.codigo},${est.nombre},,,,,,,,,,,\n`;
+      });
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", "notas_plantilla.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function importCSV(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        const rows = e.target.result.split("\n").map(r => r.split(","));
+        rows.shift(); // encabezado
+        rows.forEach(row=>{
+          if(row.length<2) return;
+          const codigo = row[0].trim();
+          const est = estudiantes.find(e=>e.codigo===codigo);
+          if(est){
+            est.notas = {
+              ser: row.slice(2,4).map(Number),
+              saber: row.slice(4,6).map(Number),
+              hacer: row.slice(6,8).map(Number),
+              decidir: row.slice(8,10).map(Number),
+              auto: Number(row[10]||0),
+              extras: Number(row[11]||0)
+            };
+          }
+        });
+        renderNotas();
+        alert("✅ Notas actualizadas desde CSV");
+      };
+      reader.readAsText(file);
+    }
+  </script>
+</body>
+</html>
